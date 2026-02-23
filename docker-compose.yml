@@ -4,12 +4,19 @@ services:
   webtop:
     build: .
     container_name: webtop
+    env_file:
+      - .env
     environment:
       - PUID=1000
       - PGID=1000
       - TZ=Asia/Tokyo
       - CUSTOM_USER=user
       - PASSWORD=strong-pass
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL}
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}
+      - ANTHROPIC_DEFAULT_HAIKU_MODEL=${ANTHROPIC_DEFAULT_HAIKU_MODEL}
+      - ANTHROPIC_DEFAULT_SONNET_MODEL=${ANTHROPIC_DEFAULT_SONNET_MODEL}
+      - ANTHROPIC_DEFAULT_OPUS_MODEL=${ANTHROPIC_DEFAULT_OPUS_MODEL}
     volumes:
       - ./webtop-config:/config
       - ./data:/data
