@@ -33,6 +33,14 @@ RUN apt-get update && apt-get install -y \
     antigravity \
     && rm -rf /var/lib/apt/lists/*
 
+# Allow the "Background" extension to patch VS Code/Antigravity workbench assets without sudo.
+RUN for f in \
+      /usr/share/antigravity/resources/app/out/vs/workbench/workbench.desktop.main.js \
+      /usr/share/antigravity/resources/app/out/vs/workbench/workbench.desktop.main.css \
+      /usr/share/antigravity/resources/app/out/vs/workbench/workbench.web.main.css; do \
+      if [ -f "$f" ]; then chown abc:abc "$f" && chmod u+rw "$f"; fi; \
+    done
+
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
@@ -180,6 +188,26 @@ cleanup_profile "/config/.config/google-chrome"
 cleanup_profile "/config/.gemini/antigravity-browser-profile"
 EOF
 RUN chmod +x /custom-cont-init.d/25-chrome-profile-cleanup.sh
+
+# linuxserver.io remaps the abc user at container start (PUID/PGID), so file ownership
+# must be fixed at runtime for extensions that patch app assets (e.g. Background).
+RUN mkdir -p /custom-cont-init.d \
+    && cat <<'EOF' > /custom-cont-init.d/26-antigravity-workbench-perms.sh
+#!/usr/bin/with-contenv bash
+set -e
+
+for f in \
+  /usr/share/antigravity/resources/app/out/vs/workbench/workbench.desktop.main.js \
+  /usr/share/antigravity/resources/app/out/vs/workbench/workbench.desktop.main.css \
+  /usr/share/antigravity/resources/app/out/vs/workbench/workbench.web.main.css
+do
+  if [ -f "$f" ]; then
+    chown abc:abc "$f" || true
+    chmod u+rw "$f" || true
+  fi
+done
+EOF
+RUN chmod +x /custom-cont-init.d/26-antigravity-workbench-perms.sh
 
 # Ensure desktop shortcuts appear for existing /config volumes as well.
 RUN mkdir -p /custom-cont-init.d \
