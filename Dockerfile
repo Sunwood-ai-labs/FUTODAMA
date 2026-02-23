@@ -1,5 +1,7 @@
 FROM lscr.io/linuxserver/webtop:ubuntu-xfce
 
+COPY assets/renji-onizuka-wallpaper.png /defaults/wallpapers/renji-onizuka-wallpaper.png
+
 # Install dependencies
 RUN apt-get update && apt-get install -y \
     wget \
@@ -157,6 +159,41 @@ RUN sed -i 's|X-XFCE-Binaries=google-chrome;google-chrome-stable;com.google.Chro
     && sed -i 's|X-XFCE-Commands=%B;|X-XFCE-Commands=/usr/local/bin/google-chrome-launch;|g' /usr/share/xfce4/helpers/google-chrome.desktop \
     && sed -i 's|X-XFCE-CommandsWithParameter=%B "%s";|X-XFCE-CommandsWithParameter=/usr/local/bin/google-chrome-launch "%s";|g' /usr/share/xfce4/helpers/google-chrome.desktop
 
+# Helper to apply a user wallpaper to all XFCE workspaces/monitors.
+RUN cat <<'EOF' > /usr/local/bin/apply-user-wallpaper
+#!/usr/bin/env bash
+set -e
+
+WALLPAPER_PATH="${1:-/config/Desktop/renji-onizuka-wallpaper.png}"
+
+if [ ! -f "$WALLPAPER_PATH" ]; then
+  exit 0
+fi
+
+export HOME="${HOME:-/config}"
+export DISPLAY="${DISPLAY:-:1}"
+
+# Wait for xfconf/xfdesktop to be available after session start.
+for _ in $(seq 1 30); do
+  if xfconf-query -c xfce4-desktop -lv >/tmp/.xfce4-desktop-query.log 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+xfconf-query -c xfce4-desktop -lv | while IFS= read -r line; do
+  p="${line%% *}"
+  case "$line" in
+    *"/last-image"*) xfconf-query -c xfce4-desktop -p "$p" -s "$WALLPAPER_PATH" ;;
+    *"/image-style"*) xfconf-query -c xfce4-desktop -p "$p" -s 5 ;;
+    *"/color-style"*) xfconf-query -c xfce4-desktop -p "$p" -s 3 ;;
+  esac
+done
+
+xfdesktop --reload >/dev/null 2>&1 || true
+EOF
+RUN chmod +x /usr/local/bin/apply-user-wallpaper
+
 # Clean stale Chrome singleton locks in persisted profiles after container recreation.
 RUN mkdir -p /custom-cont-init.d \
     && cat <<'EOF' > /custom-cont-init.d/25-chrome-profile-cleanup.sh
@@ -208,6 +245,52 @@ do
 done
 EOF
 RUN chmod +x /custom-cont-init.d/26-antigravity-workbench-perms.sh
+
+# Persist a wallpaper autostart that reapplies the user's chosen image on every session start.
+RUN mkdir -p /custom-cont-init.d \
+    && cat <<'EOF' > /custom-cont-init.d/27-wallpaper-autostart.sh
+#!/usr/bin/with-contenv bash
+set -e
+
+DESKTOP_DIR="/config/Desktop"
+AUTOSTART_DIR="/config/.config/autostart"
+LEGACY_WALLPAPER="/config/Desktop/hf_20260223_060813_2111db02-ba1e-4cd0-ad9c-9db0c0129769.png"
+WALLPAPER="/config/Desktop/renji-onizuka-wallpaper.png"
+DEFAULT_WALLPAPER="/defaults/wallpapers/renji-onizuka-wallpaper.png"
+
+mkdir -p "$DESKTOP_DIR" "$AUTOSTART_DIR"
+
+# Normalize the generated filename to a stable name (one-time migration).
+if [ ! -f "$WALLPAPER" ] && [ -f "$LEGACY_WALLPAPER" ]; then
+  mv "$LEGACY_WALLPAPER" "$WALLPAPER"
+fi
+
+# Seed the configured wallpaper into persisted /config on first start.
+if [ ! -f "$WALLPAPER" ] && [ -f "$DEFAULT_WALLPAPER" ]; then
+  cp "$DEFAULT_WALLPAPER" "$WALLPAPER"
+fi
+
+cat > "$AUTOSTART_DIR/renji-wallpaper.desktop" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Renji Wallpaper
+Comment=Apply Renji Onizuka wallpaper on login
+Exec=/bin/bash -lc '/usr/local/bin/apply-user-wallpaper "$WALLPAPER"'
+OnlyShowIn=XFCE;
+X-GNOME-Autostart-enabled=true
+Terminal=false
+Hidden=false
+DESKTOP
+
+chown abc:abc "$AUTOSTART_DIR/renji-wallpaper.desktop" || true
+chmod 644 "$AUTOSTART_DIR/renji-wallpaper.desktop" || true
+if [ -f "$WALLPAPER" ]; then
+  chown abc:abc "$WALLPAPER" || true
+  chmod 644 "$WALLPAPER" || true
+fi
+EOF
+RUN chmod +x /custom-cont-init.d/27-wallpaper-autostart.sh
 
 # Ensure desktop shortcuts appear for existing /config volumes as well.
 RUN mkdir -p /custom-cont-init.d \
