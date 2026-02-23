@@ -12,6 +12,7 @@ services:
       - TZ=Asia/Tokyo
       - CUSTOM_USER=user
       - PASSWORD=strong-pass
+      # Claude Code -> GLM (z.ai Anthropic-compatible API) settings
       - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL}
       - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}
       - ANTHROPIC_DEFAULT_HAIKU_MODEL=${ANTHROPIC_DEFAULT_HAIKU_MODEL}
