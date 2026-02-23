@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     g++ \
     cmake \
     python3 \
+    gh \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js (for Claude Code and Codex)
@@ -48,6 +49,9 @@ RUN npm install -g @anthropic-ai/claude-code
 
 # Install OpenAI Codex CLI
 RUN npm install -g @openai/codex
+
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 
 # Install OpenClaw CLI
 RUN SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install -g openclaw@latest
