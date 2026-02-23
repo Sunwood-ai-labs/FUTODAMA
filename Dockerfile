@@ -42,13 +42,36 @@ RUN npm install -g @openai/codex
 # Install OpenClaw CLI
 RUN SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install -g openclaw@latest
 
+# Install terminal monitoring tools
+RUN apt-get update && apt-get install -y \
+    nmon \
+    && rm -rf /var/lib/apt/lists/*
+
 # Launcher for container environments where Chromium sandbox namespaces are restricted.
-RUN printf '#!/usr/bin/env bash\nexec antigravity --no-sandbox "$@"\n' > /usr/local/bin/antigravity-launch \
+RUN printf '#!/usr/bin/env bash\nexport BROWSER=/usr/local/bin/google-chrome-launch\nexec antigravity --no-sandbox "$@"\n' > /usr/local/bin/antigravity-launch \
     && chmod +x /usr/local/bin/antigravity-launch
 
 # Chrome launcher with --no-sandbox for container environments
 RUN printf '#!/usr/bin/env bash\nexec /usr/bin/google-chrome-stable --no-sandbox --disable-gpu --download.default_directory=/config/Downloads "$@"\n' > /usr/local/bin/google-chrome-launch \
     && chmod +x /usr/local/bin/google-chrome-launch
+
+# Prefer Chrome directly for URL opens from Electron/xdg-open in container desktops.
+RUN cat <<'EOF' > /usr/local/bin/xdg-open
+#!/usr/bin/env bash
+set -e
+
+if [ "$#" -gt 0 ]; then
+  case "$1" in
+    http://*|https://*)
+      printf '%s xdg-open -> chrome %s\n' "$(date -Iseconds)" "$*" >> /tmp/xdg-open-wrapper.log || true
+      exec /usr/local/bin/google-chrome-launch "$@"
+      ;;
+  esac
+fi
+
+exec /usr/bin/xdg-open "$@"
+EOF
+RUN chmod +x /usr/local/bin/xdg-open
 
 # Override /usr/bin/google-chrome to always use --no-sandbox and download directory (for Antigravity)
 RUN mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.real \
@@ -63,6 +86,30 @@ RUN sed -i 's|Exec=/usr/bin/google-chrome-stable|Exec=/usr/local/bin/google-chro
 RUN sed -i 's|X-XFCE-Binaries=google-chrome;google-chrome-stable;com.google.Chrome;|X-XFCE-Binaries=google-chrome-launch;|g' /usr/share/xfce4/helpers/google-chrome.desktop \
     && sed -i 's|X-XFCE-Commands=%B;|X-XFCE-Commands=/usr/local/bin/google-chrome-launch;|g' /usr/share/xfce4/helpers/google-chrome.desktop \
     && sed -i 's|X-XFCE-CommandsWithParameter=%B "%s";|X-XFCE-CommandsWithParameter=/usr/local/bin/google-chrome-launch "%s";|g' /usr/share/xfce4/helpers/google-chrome.desktop
+
+# Clean stale Chrome singleton locks in persisted profiles after container recreation.
+RUN mkdir -p /custom-cont-init.d \
+    && cat <<'EOF' > /custom-cont-init.d/25-chrome-profile-cleanup.sh
+#!/usr/bin/with-contenv bash
+set -e
+
+CHROME_PROFILE="/config/.config/google-chrome"
+
+if [ ! -d "$CHROME_PROFILE" ]; then
+  exit 0
+fi
+
+rm -f \
+  "$CHROME_PROFILE/SingletonLock" \
+  "$CHROME_PROFILE/SingletonCookie" \
+  "$CHROME_PROFILE/SingletonSocket"
+
+find "$CHROME_PROFILE" -maxdepth 1 -type d -name '.org.chromium.Chromium.*' -exec rm -rf {} + 2>/dev/null || true
+
+mkdir -p "$CHROME_PROFILE/Crash Reports/pending"
+find "$CHROME_PROFILE/Crash Reports/pending" -maxdepth 1 -type f -name '*.lock' -delete 2>/dev/null || true
+EOF
+RUN chmod +x /custom-cont-init.d/25-chrome-profile-cleanup.sh
 
 # Ensure desktop shortcuts appear for existing /config volumes as well.
 RUN mkdir -p /custom-cont-init.d \
