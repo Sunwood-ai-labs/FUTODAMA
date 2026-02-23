@@ -8,6 +8,10 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     openssh-server \
     curl \
+    make \
+    g++ \
+    cmake \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js (for Claude Code and Codex)
@@ -34,6 +38,9 @@ RUN npm install -g @anthropic-ai/claude-code
 
 # Install OpenAI Codex CLI
 RUN npm install -g @openai/codex
+
+# Install OpenClaw CLI
+RUN SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install -g openclaw@latest
 
 # Launcher for container environments where Chromium sandbox namespaces are restricted.
 RUN printf '#!/usr/bin/env bash\nexec antigravity --no-sandbox "$@"\n' > /usr/local/bin/antigravity-launch \
@@ -81,7 +88,11 @@ if [ ! -f "$DESKTOP_DIR/codex.desktop" ]; then
   cp /defaults/Desktop/codex.desktop "$DESKTOP_DIR/codex.desktop"
 fi
 
-for launcher in "$DESKTOP_DIR/antigravity.desktop" "$DESKTOP_DIR/google-chrome.desktop" "$DESKTOP_DIR/claude-code.desktop" "$DESKTOP_DIR/codex.desktop"; do
+if [ ! -f "$DESKTOP_DIR/openclaw.desktop" ]; then
+  cp /defaults/Desktop/openclaw.desktop "$DESKTOP_DIR/openclaw.desktop"
+fi
+
+for launcher in "$DESKTOP_DIR/antigravity.desktop" "$DESKTOP_DIR/google-chrome.desktop" "$DESKTOP_DIR/claude-code.desktop" "$DESKTOP_DIR/codex.desktop" "$DESKTOP_DIR/openclaw.desktop"; do
   if [ -f "$launcher" ]; then
     chown abc:abc "$launcher"
     chmod 755 "$launcher"
@@ -117,7 +128,8 @@ RUN mkdir -p /defaults/Desktop \
     && echo '[Desktop Entry]\nVersion=1.0\nType=Application\nName=Antigravity\nComment=Google Antigravity\nExec=/usr/local/bin/antigravity-launch\nIcon=antigravity\nCategories=Development;IDE;' > /defaults/Desktop/antigravity.desktop \
     && echo '[Desktop Entry]\nVersion=1.0\nName=Google Chrome\nGenericName=Web Browser\nComment=Access the Internet\nExec=/usr/local/bin/google-chrome-launch %U\nStartupNotify=true\nTerminal=false\nIcon=google-chrome\nType=Application\nCategories=Network;WebBrowser;\nMimeType=application/pdf;application/rdf+xml;application/rss+xml;application/xhtml+xml;application/xhtml_xml;application/xml;image/gif;image/jpeg;image/png;image/webp;text/html;text/xml;x-scheme-handler/http;x-scheme-handler/https;' > /defaults/Desktop/google-chrome.desktop \
     && echo '[Desktop Entry]\nVersion=1.0\nType=Application\nName=Claude Code\nComment=Anthropic Claude Code CLI\nExec=xfce4-terminal -e "claude"\nIcon=utilities-terminal\nCategories=Development;ConsoleOnly;' > /defaults/Desktop/claude-code.desktop \
-    && echo '[Desktop Entry]\nVersion=1.0\nType=Application\nName=Codex\nComment=OpenAI Codex CLI\nExec=xfce4-terminal -e "codex"\nIcon=utilities-terminal\nCategories=Development;ConsoleOnly;' > /defaults/Desktop/codex.desktop
+    && echo '[Desktop Entry]\nVersion=1.0\nType=Application\nName=Codex\nComment=OpenAI Codex CLI\nExec=xfce4-terminal -e "codex"\nIcon=utilities-terminal\nCategories=Development;ConsoleOnly;' > /defaults/Desktop/codex.desktop \
+    && echo '[Desktop Entry]\nVersion=1.0\nType=Application\nName=OpenClaw\nComment=OpenClaw CLI\nExec=xfce4-terminal -e "openclaw"\nIcon=utilities-terminal\nCategories=Development;ConsoleOnly;' > /defaults/Desktop/openclaw.desktop
 
 # SSH server setup
 RUN mkdir -p /var/run/sshd \
