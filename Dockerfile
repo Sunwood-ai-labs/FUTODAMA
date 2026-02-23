@@ -48,30 +48,92 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Launcher for container environments where Chromium sandbox namespaces are restricted.
-RUN printf '#!/usr/bin/env bash\nexport BROWSER=/usr/local/bin/google-chrome-launch\nexec antigravity --no-sandbox "$@"\n' > /usr/local/bin/antigravity-launch \
+RUN printf '#!/usr/bin/env bash\nexport BROWSER=/usr/local/bin/google-chrome-launch\nexport GTK_USE_PORTAL=0\nexec antigravity --no-sandbox "$@"\n' > /usr/local/bin/antigravity-launch \
     && chmod +x /usr/local/bin/antigravity-launch
 
 # Chrome launcher with --no-sandbox for container environments
 RUN printf '#!/usr/bin/env bash\nexec /usr/bin/google-chrome-stable --no-sandbox --disable-gpu --download.default_directory=/config/Downloads "$@"\n' > /usr/local/bin/google-chrome-launch \
     && chmod +x /usr/local/bin/google-chrome-launch
 
-# Prefer Chrome directly for URL opens from Electron/xdg-open in container desktops.
-RUN cat <<'EOF' > /usr/local/bin/xdg-open
+# Prefer Chrome directly for URL opens from Electron/desktop helpers in container desktops.
+RUN cat <<'EOF' > /usr/local/bin/desktop-url-open
 #!/usr/bin/env bash
 set -e
 
-if [ "$#" -gt 0 ]; then
-  case "$1" in
+LOG_FILE=/tmp/url-open-wrapper.log
+
+log() {
+  printf '%s %s %s\n' "$(date -Iseconds)" "$1" "$2" >> "$LOG_FILE" || true
+}
+
+if [ "$#" -eq 0 ]; then
+  exit 1
+fi
+
+case "$1" in
+  http://*|https://*)
+    log "direct" "$*"
+    exec /usr/local/bin/google-chrome-launch --new-window "$@"
+    ;;
+esac
+
+if [ "$1" = "--launch" ] && [ "${2:-}" = "WebBrowser" ] && [ "${3:-}" != "" ]; then
+  case "$3" in
     http://*|https://*)
-      printf '%s xdg-open -> chrome %s\n' "$(date -Iseconds)" "$*" >> /tmp/xdg-open-wrapper.log || true
-      exec /usr/local/bin/google-chrome-launch "$@"
+      log "exo-open" "$*"
+      exec /usr/local/bin/google-chrome-launch --new-window "$3"
       ;;
   esac
 fi
 
-exec /usr/bin/xdg-open "$@"
+if [ "$1" = "open" ] && [ "${2:-}" != "" ]; then
+  case "$2" in
+    http://*|https://*)
+      log "gio-open" "$*"
+      exec /usr/local/bin/google-chrome-launch --new-window "$2"
+      ;;
+  esac
+fi
+
+exit 2
 EOF
-RUN chmod +x /usr/local/bin/xdg-open
+RUN chmod +x /usr/local/bin/desktop-url-open
+
+RUN if [ -x /usr/bin/xdg-open ] && [ ! -e /usr/bin/xdg-open.real ]; then mv /usr/bin/xdg-open /usr/bin/xdg-open.real; fi \
+    && cat <<'EOF' > /usr/bin/xdg-open
+#!/usr/bin/env bash
+set -e
+/usr/local/bin/desktop-url-open "$@" && exit 0 || rc=$?
+if [ "${rc:-0}" -ne 2 ]; then
+  exit "${rc:-1}"
+fi
+exec /usr/bin/xdg-open.real "$@"
+EOF
+RUN chmod +x /usr/bin/xdg-open
+
+RUN if [ -x /usr/bin/exo-open ] && [ ! -e /usr/bin/exo-open.real ]; then mv /usr/bin/exo-open /usr/bin/exo-open.real; fi \
+    && cat <<'EOF' > /usr/bin/exo-open
+#!/usr/bin/env bash
+set -e
+/usr/local/bin/desktop-url-open "$@" && exit 0 || rc=$?
+if [ "${rc:-0}" -ne 2 ]; then
+  exit "${rc:-1}"
+fi
+exec /usr/bin/exo-open.real "$@"
+EOF
+RUN chmod +x /usr/bin/exo-open
+
+RUN if [ -x /usr/bin/gio ] && [ ! -e /usr/bin/gio.real ]; then mv /usr/bin/gio /usr/bin/gio.real; fi \
+    && cat <<'EOF' > /usr/bin/gio
+#!/usr/bin/env bash
+set -e
+/usr/local/bin/desktop-url-open "$@" && exit 0 || rc=$?
+if [ "${rc:-0}" -ne 2 ]; then
+  exit "${rc:-1}"
+fi
+exec /usr/bin/gio.real "$@"
+EOF
+RUN chmod +x /usr/bin/gio
 
 # Override /usr/bin/google-chrome to always use --no-sandbox and download directory (for Antigravity)
 RUN mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.real \
@@ -93,21 +155,29 @@ RUN mkdir -p /custom-cont-init.d \
 #!/usr/bin/with-contenv bash
 set -e
 
-CHROME_PROFILE="/config/.config/google-chrome"
+cleanup_profile() {
+  local profile_dir="$1"
 
-if [ ! -d "$CHROME_PROFILE" ]; then
-  exit 0
-fi
+  if [ ! -d "$profile_dir" ]; then
+    return 0
+  fi
 
-rm -f \
-  "$CHROME_PROFILE/SingletonLock" \
-  "$CHROME_PROFILE/SingletonCookie" \
-  "$CHROME_PROFILE/SingletonSocket"
+  rm -f \
+    "$profile_dir/SingletonLock" \
+    "$profile_dir/SingletonCookie" \
+    "$profile_dir/SingletonSocket"
 
-find "$CHROME_PROFILE" -maxdepth 1 -type d -name '.org.chromium.Chromium.*' -exec rm -rf {} + 2>/dev/null || true
+  find "$profile_dir" -maxdepth 1 -type d -name '.org.chromium.Chromium.*' -exec rm -rf {} + 2>/dev/null || true
 
-mkdir -p "$CHROME_PROFILE/Crash Reports/pending"
-find "$CHROME_PROFILE/Crash Reports/pending" -maxdepth 1 -type f -name '*.lock' -delete 2>/dev/null || true
+  mkdir -p "$profile_dir/Crash Reports/pending"
+  find "$profile_dir/Crash Reports/pending" -maxdepth 1 -type f -name '*.lock' -delete 2>/dev/null || true
+}
+
+# Default Chrome profile used by desktop launches.
+cleanup_profile "/config/.config/google-chrome"
+
+# Antigravity browser-launcher extension profile (remote debugging / onboarding flow).
+cleanup_profile "/config/.gemini/antigravity-browser-profile"
 EOF
 RUN chmod +x /custom-cont-init.d/25-chrome-profile-cleanup.sh
 
