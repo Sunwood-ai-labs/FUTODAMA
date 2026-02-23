@@ -306,6 +306,42 @@ chmod u+rwX "$OPENCLAW_DIR" || true
 EOF
 RUN chmod +x /custom-cont-init.d/28-openclaw-config-perms.sh
 
+# systemd user services are unavailable in this container, so start OpenClaw
+# Gateway via custom init in the background when enabled.
+RUN mkdir -p /custom-cont-init.d \
+    && cat <<'EOF' > /custom-cont-init.d/29-openclaw-gateway-autostart.sh
+#!/usr/bin/with-contenv bash
+set -e
+
+: "${OPENCLAW_GATEWAY_AUTOSTART:=1}"
+
+if [ "$OPENCLAW_GATEWAY_AUTOSTART" = "0" ]; then
+  echo "[openclaw] autostart disabled (OPENCLAW_GATEWAY_AUTOSTART=0)"
+  exit 0
+fi
+
+mkdir -p /config/.openclaw
+chown -R abc:abc /config/.openclaw || true
+
+if s6-setuidgid abc openclaw gateway health >/dev/null 2>&1; then
+  echo "[openclaw] gateway already healthy; skipping autostart"
+  exit 0
+fi
+
+if pgrep -u abc -f 'openclaw .*gateway run' >/dev/null 2>&1; then
+  echo "[openclaw] gateway process already running; skipping autostart"
+  exit 0
+fi
+
+LOG_FILE="/config/.openclaw/gateway.log"
+touch "$LOG_FILE"
+chown abc:abc "$LOG_FILE" || true
+
+echo "[openclaw] starting gateway in background"
+nohup s6-setuidgid abc openclaw gateway run --allow-unconfigured >>"$LOG_FILE" 2>&1 &
+EOF
+RUN chmod +x /custom-cont-init.d/29-openclaw-gateway-autostart.sh
+
 # Ensure desktop shortcuts appear for existing /config volumes as well.
 RUN mkdir -p /custom-cont-init.d \
     && cat <<'EOF' > /custom-cont-init.d/30-desktop-shortcuts.sh
