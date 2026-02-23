@@ -292,6 +292,20 @@ fi
 EOF
 RUN chmod +x /custom-cont-init.d/27-wallpaper-autostart.sh
 
+# Repair persisted OpenClaw config ownership after accidental root runs.
+RUN mkdir -p /custom-cont-init.d \
+    && cat <<'EOF' > /custom-cont-init.d/28-openclaw-config-perms.sh
+#!/usr/bin/with-contenv bash
+set -e
+
+OPENCLAW_DIR="/config/.openclaw"
+
+mkdir -p "$OPENCLAW_DIR"
+chown -R abc:abc "$OPENCLAW_DIR" || true
+chmod u+rwX "$OPENCLAW_DIR" || true
+EOF
+RUN chmod +x /custom-cont-init.d/28-openclaw-config-perms.sh
+
 # Ensure desktop shortcuts appear for existing /config volumes as well.
 RUN mkdir -p /custom-cont-init.d \
     && cat <<'EOF' > /custom-cont-init.d/30-desktop-shortcuts.sh
