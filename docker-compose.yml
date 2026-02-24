@@ -3,7 +3,7 @@ version: "3.8"
 services:
   webtop:
     build: .
-    container_name: webtop
+    container_name: agi-ws-futodama
     env_file:
       - .env
     environment:
@@ -19,7 +19,7 @@ services:
       - ANTHROPIC_DEFAULT_SONNET_MODEL=${ANTHROPIC_DEFAULT_SONNET_MODEL}
       - ANTHROPIC_DEFAULT_OPUS_MODEL=${ANTHROPIC_DEFAULT_OPUS_MODEL}
     volumes:
-      - ./webtop-config:/config
+      - ./futodama-config:/config
       - ./data:/data
     ports:
       - "127.0.0.1:3333:3001"

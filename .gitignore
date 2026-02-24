@@ -1,6 +1,6 @@
-# Webtop configuration
-webtop-config/*
-!webtop-config/custom-cont-init.d/
+# Futodama configuration
+futodama-config/*
+!futodama-config/custom-cont-init.d/
 
 # Docker
 .env
