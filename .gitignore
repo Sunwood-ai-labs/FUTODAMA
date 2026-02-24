@@ -1,6 +1,6 @@
 # Futodama configuration
 futodama-config/*
-!futodama-config/custom-cont-init.d/
+!futodama-config/.gitkeep
 
 # Docker
 .env

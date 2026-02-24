@@ -198,6 +198,18 @@ xfdesktop --reload >/dev/null 2>&1 || true
 EOF
 RUN chmod +x /usr/local/bin/apply-user-wallpaper
 
+# Ensure /defaults/pid exists so selkies backend can finish initialization.
+RUN mkdir -p /custom-cont-init.d \
+    && cat <<'EOF' > /custom-cont-init.d/05-selkies-touch-pid.sh
+#!/usr/bin/with-contenv bash
+set -e
+
+echo "Applying selkies init fix: creating /defaults/pid..."
+touch /defaults/pid
+chown abc:abc /defaults/pid || true
+EOF
+RUN chmod +x /custom-cont-init.d/05-selkies-touch-pid.sh
+
 # Clean stale Chrome singleton locks in persisted profiles after container recreation.
 RUN mkdir -p /custom-cont-init.d \
     && cat <<'EOF' > /custom-cont-init.d/25-chrome-profile-cleanup.sh
