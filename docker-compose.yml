@@ -18,6 +18,12 @@ services:
       - ANTHROPIC_DEFAULT_HAIKU_MODEL=${ANTHROPIC_DEFAULT_HAIKU_MODEL}
       - ANTHROPIC_DEFAULT_SONNET_MODEL=${ANTHROPIC_DEFAULT_SONNET_MODEL}
       - ANTHROPIC_DEFAULT_OPUS_MODEL=${ANTHROPIC_DEFAULT_OPUS_MODEL}
+      # Optional: autostart a Python script inside the container on boot
+      # - PYTHON_AUTOSTART_ENABLE=1
+      # - PYTHON_AUTOSTART_SCRIPT=/config/startup/my_script.py
+      # - PYTHON_AUTOSTART_CWD=/config/startup
+      # - PYTHON_AUTOSTART_PYTHON=python3
+      # - PYTHON_AUTOSTART_DELAY_SEC=5
     volumes:
       - ./futodama-config:/config
       - ./data:/data

@@ -449,6 +449,64 @@ done
 EOF
 RUN chmod +x /custom-cont-init.d/30-desktop-shortcuts.sh
 
+# Autostart a user-provided Python script from the persisted /config volume.
+RUN mkdir -p /custom-cont-init.d \
+    && cat <<'EOF' > /custom-cont-init.d/31-python-autostart.sh
+#!/usr/bin/with-contenv bash
+set -euo pipefail
+
+: "${PYTHON_AUTOSTART_ENABLE:=0}"
+: "${PYTHON_AUTOSTART_SCRIPT:=}"
+: "${PYTHON_AUTOSTART_PYTHON:=python3}"
+: "${PYTHON_AUTOSTART_CWD:=/config}"
+: "${PYTHON_AUTOSTART_DELAY_SEC:=0}"
+: "${PYTHON_AUTOSTART_LOG:=/config/.local/state/futodama/python-autostart.log}"
+: "${PYTHON_AUTOSTART_PID_FILE:=/config/.local/state/futodama/python-autostart.pid}"
+
+if [ "$PYTHON_AUTOSTART_ENABLE" = "0" ] || [ -z "$PYTHON_AUTOSTART_SCRIPT" ]; then
+  exit 0
+fi
+
+if [ ! -f "$PYTHON_AUTOSTART_SCRIPT" ]; then
+  echo "[python-autostart] script not found: $PYTHON_AUTOSTART_SCRIPT"
+  exit 0
+fi
+
+if [ ! -d "$PYTHON_AUTOSTART_CWD" ]; then
+  echo "[python-autostart] cwd not found: $PYTHON_AUTOSTART_CWD"
+  exit 0
+fi
+
+mkdir -p "$(dirname "$PYTHON_AUTOSTART_LOG")" "$(dirname "$PYTHON_AUTOSTART_PID_FILE")" || true
+touch "$PYTHON_AUTOSTART_LOG"
+chown -R abc:abc "$(dirname "$PYTHON_AUTOSTART_LOG")" "$(dirname "$PYTHON_AUTOSTART_PID_FILE")" || true
+
+if [ -f "$PYTHON_AUTOSTART_PID_FILE" ]; then
+  pid="$(cat "$PYTHON_AUTOSTART_PID_FILE" 2>/dev/null || true)"
+  if [ -n "$pid" ] && kill -0 "$pid" >/dev/null 2>&1; then
+    echo "[python-autostart] already running (pid=$pid); skipping"
+    exit 0
+  fi
+fi
+
+if ! command -v s6-setuidgid >/dev/null 2>&1; then
+  echo "[python-autostart] s6-setuidgid not available; skipping"
+  exit 0
+fi
+
+if [ "$PYTHON_AUTOSTART_DELAY_SEC" != "0" ]; then
+  echo "[python-autostart] waiting ${PYTHON_AUTOSTART_DELAY_SEC}s before start"
+  sleep "$PYTHON_AUTOSTART_DELAY_SEC"
+fi
+
+echo "[python-autostart] starting: $PYTHON_AUTOSTART_PYTHON $PYTHON_AUTOSTART_SCRIPT"
+nohup s6-setuidgid abc bash -lc "cd \"\$1\" && exec env HOME=/config \"\$2\" \"\$3\"" -- \
+  "$PYTHON_AUTOSTART_CWD" "$PYTHON_AUTOSTART_PYTHON" "$PYTHON_AUTOSTART_SCRIPT" >>"$PYTHON_AUTOSTART_LOG" 2>&1 &
+echo "$!" > "$PYTHON_AUTOSTART_PID_FILE"
+chown abc:abc "$PYTHON_AUTOSTART_PID_FILE" || true
+EOF
+RUN chmod +x /custom-cont-init.d/31-python-autostart.sh
+
 # Set Google Chrome as default browser for abc user in the persisted /config profile.
 RUN cat <<'EOF' > /custom-cont-init.d/40-default-browser-chrome.sh
 #!/usr/bin/with-contenv bash
