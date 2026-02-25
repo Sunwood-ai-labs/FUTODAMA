@@ -63,6 +63,48 @@ RUN export HOME=/root \
 # Install OpenClaw CLI
 RUN SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install -g openclaw@latest
 
+# Wrapper for container environments where `openclaw gateway restart` may rely on systemd user services.
+RUN cat <<'EOF' > /usr/local/bin/openclaw
+#!/usr/bin/env bash
+set -euo pipefail
+
+OPENCLAW_REAL=/usr/bin/openclaw
+
+fallback_gateway_restart() {
+  local log_file="${OPENCLAW_GATEWAY_LOG_FILE:-/config/.openclaw/gateway.log}"
+  mkdir -p "$(dirname "$log_file")" 2>/dev/null || true
+
+  # Stop existing foreground/background gateway run processes if present.
+  if pgrep -f 'openclaw .*gateway run' >/dev/null 2>&1; then
+    pkill -f 'openclaw .*gateway run' >/dev/null 2>&1 || true
+    sleep 1
+  fi
+
+  nohup "$OPENCLAW_REAL" gateway run --allow-unconfigured >>"$log_file" 2>&1 &
+  sleep 2
+
+  if "$OPENCLAW_REAL" gateway health >/dev/null 2>&1; then
+    echo "Gateway restarted via container fallback (systemctl --user unavailable)." >&2
+    return 0
+  fi
+
+  echo "Gateway fallback restart could not confirm health. Check $log_file" >&2
+  return 1
+}
+
+if [ "${1:-}" = "gateway" ] && [ "${2:-}" = "restart" ]; then
+  if "$OPENCLAW_REAL" "$@"; then
+    exit 0
+  fi
+  echo "openclaw gateway restart failed; trying container fallback..." >&2
+  fallback_gateway_restart
+  exit $?
+fi
+
+exec "$OPENCLAW_REAL" "$@"
+EOF
+RUN chmod +x /usr/local/bin/openclaw
+
 # Install terminal monitoring tools
 RUN apt-get update && apt-get install -y \
     nmon \
