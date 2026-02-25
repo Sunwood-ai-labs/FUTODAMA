@@ -53,11 +53,13 @@ RUN npm install -g @openai/codex
 # Install uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 
-# Install Kimi Code CLI (use /root so /config bind-mount does not hide binaries at runtime)
-RUN export HOME=/root \
+# Install Kimi Code CLI in a shared location (avoid /config bind-mount and /root permission issues)
+RUN export HOME=/opt/kimi-home \
+    && mkdir -p "$HOME" \
     && curl -fsSL https://code.kimi.com/install.sh | bash \
+    && chmod -R a+rX /opt/kimi-home \
     && for bin in kimi kimi-cli; do \
-      if [ -x "/root/.local/bin/$bin" ]; then ln -sf "/root/.local/bin/$bin" "/usr/local/bin/$bin"; fi; \
+      if [ -x "/opt/kimi-home/.local/bin/$bin" ]; then ln -sf "/opt/kimi-home/.local/bin/$bin" "/usr/local/bin/$bin"; fi; \
     done
 
 # Install OpenClaw CLI
