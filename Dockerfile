@@ -507,6 +507,66 @@ chown abc:abc "$PYTHON_AUTOSTART_PID_FILE" || true
 EOF
 RUN chmod +x /custom-cont-init.d/31-python-autostart.sh
 
+# Enable persisted user-defined s6 services from /config/s6-services.
+RUN mkdir -p /custom-cont-init.d \
+    && cat <<'EOF' > /custom-cont-init.d/32-s6-user-services.sh
+#!/usr/bin/with-contenv bash
+set -euo pipefail
+
+: "${S6_USER_SERVICES_ENABLE:=1}"
+: "${S6_USER_SERVICES_DIR:=/config/s6-services}"
+: "${S6_SCAN_DIR:=/run/service}"
+
+if [ "$S6_USER_SERVICES_ENABLE" = "0" ]; then
+  echo "[s6-user-services] disabled (S6_USER_SERVICES_ENABLE=0)"
+  exit 0
+fi
+
+mkdir -p "$S6_USER_SERVICES_DIR"
+chown -R abc:abc "$S6_USER_SERVICES_DIR" || true
+
+if [ ! -d "$S6_SCAN_DIR" ]; then
+  echo "[s6-user-services] scan dir not found: $S6_SCAN_DIR"
+  exit 0
+fi
+
+added=0
+
+for svc_dir in "$S6_USER_SERVICES_DIR"/*; do
+  if [ ! -d "$svc_dir" ]; then
+    continue
+  fi
+
+  name="$(basename "$svc_dir")"
+  run_file="$svc_dir/run"
+  target="$S6_SCAN_DIR/$name"
+
+  if [ ! -f "$run_file" ]; then
+    echo "[s6-user-services] skipping $name (missing run file)"
+    continue
+  fi
+
+  chmod +x "$run_file" 2>/dev/null || true
+
+  if [ -e "$target" ] || [ -L "$target" ]; then
+    if [ -L "$target" ] && [ "$(readlink -f "$target" 2>/dev/null || true)" = "$(readlink -f "$svc_dir" 2>/dev/null || true)" ]; then
+      continue
+    fi
+    echo "[s6-user-services] skipping $name (target exists: $target)"
+    continue
+  fi
+
+  ln -s "$svc_dir" "$target"
+  echo "[s6-user-services] enabled $name -> $svc_dir"
+  added=1
+done
+
+if [ "$added" = "1" ] && command -v s6-svscanctl >/dev/null 2>&1; then
+  s6-svscanctl -a "$S6_SCAN_DIR" >/dev/null 2>&1 || true
+fi
+EOF
+RUN chmod +x /custom-cont-init.d/32-s6-user-services.sh
+
 # Set Google Chrome as default browser for abc user in the persisted /config profile.
 RUN cat <<'EOF' > /custom-cont-init.d/40-default-browser-chrome.sh
 #!/usr/bin/with-contenv bash

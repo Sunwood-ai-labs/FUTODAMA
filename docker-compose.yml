@@ -24,6 +24,9 @@ services:
       # - PYTHON_AUTOSTART_CWD=/config/startup
       # - PYTHON_AUTOSTART_PYTHON=python3
       # - PYTHON_AUTOSTART_DELAY_SEC=5
+      # Optional: enable persisted s6 services from /config/s6-services (default on)
+      # - S6_USER_SERVICES_ENABLE=1
+      # - S6_USER_SERVICES_DIR=/config/s6-services
     volumes:
       - ./futodama-config:/config
       - ./data:/data
