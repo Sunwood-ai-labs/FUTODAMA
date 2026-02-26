@@ -50,6 +50,9 @@ RUN npm install -g @anthropic-ai/claude-code
 # Install OpenAI Codex CLI
 RUN npm install -g @openai/codex
 
+# Install Tailscale
+RUN curl -fsSL https://tailscale.com/install.sh | sh
+
 # Install uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 
