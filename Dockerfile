@@ -736,6 +736,67 @@ RUN chmod +x /etc/s6-overlay/s6-rc.d/sshd/run \
     && mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d \
     && touch /etc/s6-overlay/s6-rc.d/user/contents.d/sshd
 
+# Codex CLI compatibility wrapper for tools that still pass deprecated flags (e.g. --color).
+RUN cat <<'EOF' > /usr/local/bin/codex
+#!/usr/bin/env bash
+set -euo pipefail
+
+resolve_codex_real() {
+  local self_path candidate
+  self_path="$(readlink -f "$0" 2>/dev/null || printf '%s' "$0")"
+
+  for candidate in \
+    "${CODEX_REAL_BIN:-}" \
+    /config/.npm-global/bin/codex \
+    "$(npm prefix -g 2>/dev/null || true)/bin/codex" \
+    /usr/bin/codex.real \
+    /bin/codex.real \
+    /usr/bin/codex \
+    /bin/codex
+  do
+    [ -n "${candidate:-}" ] || continue
+    [ -x "$candidate" ] || continue
+    if [ "$(readlink -f "$candidate" 2>/dev/null || printf '%s' "$candidate")" = "$self_path" ]; then
+      continue
+    fi
+    printf '%s\n' "$candidate"
+    return 0
+  done
+
+  echo "codex real binary not found" >&2
+  return 127
+}
+
+CODEX_REAL="$(resolve_codex_real)"
+
+filtered_args=()
+skip_next=0
+for arg in "$@"; do
+  if [ "$skip_next" -eq 1 ]; then
+    skip_next=0
+    continue
+  fi
+
+  case "$arg" in
+    --color|--sandbox|--approval-mode|--ask-for-approval|--approval-policy)
+      skip_next=1
+      continue
+      ;;
+    --color=*|--sandbox=*|--approval-mode=*|--ask-for-approval=*|--approval-policy=*)
+      continue
+      ;;
+  esac
+
+  filtered_args+=("$arg")
+done
+
+exec "$CODEX_REAL" "${filtered_args[@]}"
+EOF
+RUN chmod +x /usr/local/bin/codex
+RUN if [ -e /usr/bin/codex ] && [ ! -e /usr/bin/codex.real ]; then mv /usr/bin/codex /usr/bin/codex.real; fi \
+    && ln -sf /usr/local/bin/codex /usr/bin/codex \
+    && ln -sf /usr/local/bin/codex /bin/codex
+
 # Finalize labels
 LABEL maintainer="FUTODAMA"
 LABEL description="Fully Unified Tooling and Orchestration for Desktop Agent Machine Architecture"
