@@ -73,7 +73,31 @@ RUN cat <<'EOF' > /usr/local/bin/openclaw
 #!/usr/bin/env bash
 set -euo pipefail
 
-OPENCLAW_REAL=/usr/bin/openclaw
+resolve_openclaw_real() {
+  local self_path candidate
+  self_path="$(readlink -f "$0" 2>/dev/null || printf '%s' "$0")"
+
+  for candidate in \
+    "${OPENCLAW_REAL_BIN:-}" \
+    /config/.npm-global/bin/openclaw \
+    "$(npm prefix -g 2>/dev/null || true)/bin/openclaw" \
+    /usr/bin/openclaw \
+    /bin/openclaw
+  do
+    [ -n "${candidate:-}" ] || continue
+    [ -x "$candidate" ] || continue
+    if [ "$(readlink -f "$candidate" 2>/dev/null || printf '%s' "$candidate")" = "$self_path" ]; then
+      continue
+    fi
+    printf '%s\n' "$candidate"
+    return 0
+  done
+
+  echo "openclaw real binary not found" >&2
+  return 127
+}
+
+OPENCLAW_REAL="$(resolve_openclaw_real)"
 
 fallback_gateway_restart() {
   local log_file="${OPENCLAW_GATEWAY_LOG_FILE:-/config/.openclaw/gateway.log}"
