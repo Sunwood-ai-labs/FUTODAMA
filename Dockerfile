@@ -722,6 +722,10 @@ if ! grep -q "\. ~/.bashrc" "$PROFILE_FILE" 2>/dev/null; then
   echo 'if [ -f ~/.bashrc ]; then . ~/.bashrc; fi' >> "$PROFILE_FILE"
   echo "Added bashrc source to $PROFILE_FILE"
 fi
+
+# Keep shell startup files writable by the runtime user (abc), not root.
+chown abc:abc "$BASHRC_FILE" "$PROFILE_FILE" 2>/dev/null || true
+chmod 644 "$BASHRC_FILE" "$PROFILE_FILE" 2>/dev/null || true
 EOF
 RUN chmod +x /custom-cont-init.d/10-sshd-setup.sh
 
