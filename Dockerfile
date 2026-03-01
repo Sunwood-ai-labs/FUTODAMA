@@ -17,13 +17,16 @@ RUN apt-get update && apt-get install -y \
     gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Docker CLI + Compose for controlling host Docker from inside this container
-RUN apt-get update && apt-get install -y \
-    docker.io \
-    docker-compose \
-    && rm -rf /var/lib/apt/lists/*
+# webtop already includes Docker CLI + Compose plugin; provide docker-compose compatibility command
+RUN cat <<'EOF' > /usr/local/bin/docker-compose
+#!/usr/bin/env bash
+set -euo pipefail
+exec docker compose "$@"
+EOF
+RUN chmod +x /usr/local/bin/docker-compose
 
 # Ensure non-root user can access the mounted Docker socket (if present)
+RUN mkdir -p /custom-cont-init.d
 RUN cat <<'EOF' > /custom-cont-init.d/40-docker-socket-group
 #!/usr/bin/with-contenv bash
 set -euo pipefail
