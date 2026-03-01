@@ -3,7 +3,7 @@ version: "3.8"
 services:
   webtop:
     build: .
-    container_name: agi-ws-futodama
+    container_name: futodama
     env_file:
       - .env
     environment:
