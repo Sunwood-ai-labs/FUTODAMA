@@ -17,6 +17,42 @@ RUN apt-get update && apt-get install -y \
     gh \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Docker CLI + Compose for controlling host Docker from inside this container
+RUN apt-get update && apt-get install -y \
+    docker.io \
+    docker-compose \
+    && rm -rf /var/lib/apt/lists/*
+
+# Ensure non-root user can access the mounted Docker socket (if present)
+RUN cat <<'EOF' > /custom-cont-init.d/40-docker-socket-group
+#!/usr/bin/with-contenv bash
+set -euo pipefail
+
+SOCKET_PATH="${DOCKER_SOCKET:-/var/run/docker.sock}"
+TARGET_USER="${DOCKER_USER:-abc}"
+
+if [ ! -S "$SOCKET_PATH" ]; then
+  exit 0
+fi
+
+SOCKET_GID="$(stat -c '%g' "$SOCKET_PATH")"
+if [ "$SOCKET_GID" = "0" ]; then
+  exit 0
+fi
+
+GROUP_NAME="dockersock"
+if getent group "$SOCKET_GID" >/dev/null 2>&1; then
+  GROUP_NAME="$(getent group "$SOCKET_GID" | cut -d: -f1)"
+elif getent group "$GROUP_NAME" >/dev/null 2>&1; then
+  groupmod -g "$SOCKET_GID" "$GROUP_NAME"
+else
+  groupadd -g "$SOCKET_GID" "$GROUP_NAME"
+fi
+
+usermod -aG "$GROUP_NAME" "$TARGET_USER" || true
+EOF
+RUN chmod +x /custom-cont-init.d/40-docker-socket-group
+
 # Install Node.js (for Claude Code and Codex)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \

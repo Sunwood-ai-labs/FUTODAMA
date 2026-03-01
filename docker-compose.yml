@@ -30,6 +30,7 @@ services:
     volumes:
       - ./futodama-config:/config
       - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "127.0.0.1:3333:3001"
       - "127.0.0.1:2222:22"
